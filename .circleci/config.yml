@@ -4,13 +4,55 @@ orbs:
   aws-cli: circleci/aws-cli@5.4.1
 
 jobs:
+  test:
+    docker:
+      - image: cimg/python:3.12
+    working_directory: ~/project
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - v1-pip-{{ checksum "requirements.txt" }}
+            - v1-pip-
+
+      - run:
+          name: Create virtualenv and install dependencies
+          command: |
+            python -m venv venv
+            . venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+            pip install pytest
+
+      - save_cache:
+          key: v1-pip-{{ checksum "requirements.txt" }}
+          paths:
+            - venv
+
+      - run:
+          name: Run tests
+          command: |
+            . venv/bin/activate
+            pytest
+
   deploy:
     docker:
       - image: cimg/aws:2025.01
+    working_directory: ~/project
     environment:
       AWS_REGION: us-east-1
+      BUNDLE_FILE: fastapi-app-${CIRCLE_SHA1}.zip
+      BUNDLE_KEY: codedeploy/fastapi-app-${CIRCLE_SHA1}.zip
     steps:
       - checkout
+
+      - run:
+          name: Install zip
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y zip
 
       - aws-cli/setup:
           role_arn: ${AWS_OIDC_ROLE_ARN}
@@ -19,10 +61,48 @@ jobs:
           session_duration: "3600"
 
       - run:
-          name: Verify AWS auth
-          command: aws sts get-caller-identity
+          name: Verify required deployment files exist
+          command: |
+            test -f appspec.yml
+            test -d scripts
 
       - run:
-          name: Example deploy command
+          name: Create deployment bundle
           command: |
-            aws s3 ls
+            zip -r "${BUNDLE_FILE}" . \
+              -x ".git/*" \
+              -x ".circleci/*" \
+              -x "venv/*" \
+              -x ".venv/*" \
+              -x "__pycache__/*" \
+              -x ".pytest_cache/*" \
+              -x "*.pyc"
+
+      - run:
+          name: Upload bundle to S3
+          command: |
+            aws s3 cp "${BUNDLE_FILE}" "s3://${CODEDEPLOY_BUCKET}/${BUNDLE_KEY}" --region "${AWS_REGION}"
+
+      - run:
+          name: Create CodeDeploy deployment
+          command: |
+            aws deploy create-deployment \
+              --application-name "${CODEDEPLOY_APPLICATION}" \
+              --deployment-group-name "${CODEDEPLOY_DEPLOYMENT_GROUP}" \
+              --region "${AWS_REGION}" \
+              --file-exists-behavior OVERWRITE \
+              --s3-location bucket="${CODEDEPLOY_BUCKET}",bundleType=zip,key="${BUNDLE_KEY}"
+
+workflows:
+  test_and_deploy:
+    jobs:
+      - test
+      - deploy:
+          requires:
+            - test
+          context:
+            - aws-oidc
+          filters:
+            branches:
+              only:
+                - main
