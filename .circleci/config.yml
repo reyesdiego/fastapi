@@ -42,7 +42,7 @@ jobs:
       - image: cimg/aws:2025.01
     working_directory: ~/project
     environment:
-      AWS_REGION: us-east-1
+      AWS_REGION: us-east-2
     steps:
       - checkout
 
