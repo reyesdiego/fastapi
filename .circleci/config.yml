@@ -66,6 +66,9 @@ jobs:
             source "$BASH_ENV"
             echo "$BUNDLE_FILE"
             echo "$BUNDLE_KEY"
+            echo "$CODEDEPLOY_APPLICATION"
+            echo "$CODEDEPLOY_DEPLOYMENT_GROUP"
+            echo "$AWS_REGION"
 
       - run:
           name: Verify required deployment files exist
