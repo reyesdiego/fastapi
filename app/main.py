@@ -6,7 +6,7 @@ app = FastAPI()
 
 @app.get("/")
 def read_root():
-    version = os.getenv("AWS_CODE_DEPLOY_DEPLOYMENT_DESCRIPTION", "unknown")
+    version = os.getenv("AWS_REGION", "unknown")
     return {"message": "Hello World", "status": "ok", "version": version}
 
 
