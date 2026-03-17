@@ -41,7 +41,28 @@ jobs:
       - run:
           name: "Say hello"
           command: "echo Hello, World!"
-
+  lint:
+    executor: "python-deploy"
+    steps:
+      - checkout
+      - run:
+          name: Install linters
+          command: |
+            sudo apt update && sudo apt install -y shellcheck gitlint
+      - run:
+          name: Validate Git Commits
+          command: |
+            gitlint --commits "origin/main...$CIRCLE_SHA1"
+      - run:
+          name: Shellcheck bash scripts
+          command: |
+            exec 1>&2
+            for file in $(git diff --cached --name-only --diff-filter=ACM) ; do
+              if file ${file} | grep "Bourne-Again shell script" ; then
+                bash -n ${file} || exit $?
+                shellcheck ${file} ||exit $?
+              fi
+            done
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
 workflows:
@@ -49,3 +70,4 @@ workflows:
     # Inside the workflow, you define the jobs you want to run.
     jobs:
       - say-hello
+      - lint
