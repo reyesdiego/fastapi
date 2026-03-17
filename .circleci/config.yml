@@ -2,6 +2,26 @@
 # See: https://circleci.com/docs/reference/configuration-reference
 version: 2.1
 
+executors:
+  python-deploy:
+    working_directory: ~/fastapi-app-code-deploy
+    environment:
+      AWS_CODE_DEPLOY_DEPLOYMENT_DESCRIPTION: "Deployed via CircleCI on $(date)"
+    docker:
+      # Specify the version you desire here
+      # See: https://circleci.com/developer/images/image/cimg/base
+      - image: cimg/base:2025.07
+
+commands:
+  install-aws-client:
+    steps:
+      - run:
+          name: "Install AWS Client."
+          command: |
+            curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" > /tmp/awscliv2.zip
+            unzip /tmp/awscliv2.zip -d /tmp/awscliv2
+            sudo /tmp/awscliv2/aws/install  
+
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
 jobs:
@@ -11,7 +31,7 @@ jobs:
     docker:
       # Specify the version you desire here
       # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:current
+      - image: cimg/base:2025.07
 
     # Add steps to the job
     # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#steps-overview & https://circleci.com/docs/reference/configuration-reference/#steps
