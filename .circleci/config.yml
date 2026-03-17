@@ -21,6 +21,20 @@ commands:
             curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" > /tmp/awscliv2.zip
             unzip /tmp/awscliv2.zip -d /tmp/awscliv2
             sudo /tmp/awscliv2/aws/install  
+  code-deploy:
+    steps:
+      - install-aws-client
+      - run:
+          name: "Prepare for deploy"
+          command: |
+            # Remove git data
+            rm -rf .git
+      - run:
+          name: "Deploy with CodeDeploy"
+          command: |
+            aws s3 cp s3://seclytics-build-dependencies/aws-code-deploy.sh ./aws-code-deploy.sh
+            chmod +x ./aws-code-deploy.sh
+            timeout 20m ./aws-code-deploy.sh
 
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
@@ -63,6 +77,19 @@ jobs:
                 shellcheck ${file} ||exit $?
               fi
             done
+
+  deploy-taxii-server:
+    executor: "python-deploy"
+    environment:
+      SENTRY_PROJECT: api
+      AWS_CODE_DEPLOY_APPLICATION_NAME: "taxii-server"
+      AWS_CODE_DEPLOY_DEPLOYMENT_GROUP_NAME: "production"
+      AWS_CODE_DEPLOY_S3_KEY_PREFIX: "taxii-server-production/${CIRCLE_BRANCH}/"
+      AWS_CODE_DEPLOY_DEPLOYMENT_CONFIG_NAME: CodeDeployDefault.OneAtATime
+    steps:
+      - checkout
+      - code-deploy
+
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
 workflows:
@@ -71,3 +98,9 @@ workflows:
     jobs:
       - say-hello
       - lint
+      - deploy-taxii-server:
+          context: AWS Credentials
+          filters:
+            branches:
+              only:
+                - main
