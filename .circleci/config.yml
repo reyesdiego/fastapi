@@ -1,106 +1,20 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/reference/configuration-reference
 version: 2.1
 
-executors:
-  python-deploy:
-    working_directory: ~/fastapi-app-code-deploy
-    environment:
-      AWS_CODE_DEPLOY_DEPLOYMENT_DESCRIPTION: "Deployed via CircleCI on $(date)"
-    docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:2025.07
+orbs:
+  aws-cli: circleci/aws-cli@5.4.1
 
-commands:
-  install-aws-client:
-    steps:
-      - run:
-          name: "Install AWS Client."
-          command: |
-            curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" > /tmp/awscliv2.zip
-            unzip /tmp/awscliv2.zip -d /tmp/awscliv2
-            sudo /tmp/awscliv2/aws/install  
-  code-deploy:
-    steps:
-      - install-aws-client
-      - run:
-          name: "Prepare for deploy"
-          command: |
-            # Remove git data
-            rm -rf .git
-      - run:
-          name: "Deploy with CodeDeploy"
-          command: |
-            aws s3 cp s3://seclytics-build-dependencies/aws-code-deploy.sh ./aws-code-deploy.sh
-            chmod +x ./aws-code-deploy.sh
-            timeout 20m ./aws-code-deploy.sh
-
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
 jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/guides/execution-managed/executor-intro/ & https://circleci.com/docs/reference/configuration-reference/#executor-job
+  test-oidc:
     docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:2025.07
-
-    # Add steps to the job
-    # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#steps-overview & https://circleci.com/docs/reference/configuration-reference/#steps
+      - image: cimg/aws:2025.01
     steps:
-      # Checkout the code as the first step.
-      - checkout
+      - aws-cli/setup:
+          role_arn: ${AWS_OIDC_ROLE_ARN}
+          region: ${AWS_REGION}
       - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
-  lint:
-    executor: "python-deploy"
-    steps:
-      - checkout
-      - run:
-          name: Install linters
-          command: |
-            sudo apt update && sudo apt install -y shellcheck gitlint
-      - run:
-          name: Validate Git Commits
-          command: |
-            gitlint --commits "origin/main...$CIRCLE_SHA1"
-      - run:
-          name: Shellcheck bash scripts
-          command: |
-            exec 1>&2
-            for file in $(git diff --cached --name-only --diff-filter=ACM) ; do
-              if file ${file} | grep "Bourne-Again shell script" ; then
-                bash -n ${file} || exit $?
-                shellcheck ${file} ||exit $?
-              fi
-            done
+          command: aws sts get-caller-identity
 
-  deploy-taxii-server:
-    executor: "python-deploy"
-    environment:
-      SENTRY_PROJECT: api
-      AWS_CODE_DEPLOY_APPLICATION_NAME: "taxii-server"
-      AWS_CODE_DEPLOY_DEPLOYMENT_GROUP_NAME: "production"
-      AWS_CODE_DEPLOY_S3_KEY_PREFIX: "taxii-server-production/${CIRCLE_BRANCH}/"
-      AWS_CODE_DEPLOY_DEPLOYMENT_CONFIG_NAME: CodeDeployDefault.OneAtATime
-    steps:
-      - checkout
-      - code-deploy
-
-# Orchestrate jobs using workflows
-# See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
 workflows:
-  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
+  test:
     jobs:
-      - say-hello
-      - lint
-      - deploy-taxii-server:
-          context: AWS Credentials
-          filters:
-            branches:
-              only:
-                - main
+      - test-oidc
