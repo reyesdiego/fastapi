@@ -4,17 +4,25 @@ orbs:
   aws-cli: circleci/aws-cli@5.4.1
 
 jobs:
-  test-oidc:
+  deploy:
     docker:
       - image: cimg/aws:2025.01
+    environment:
+      AWS_REGION: us-east-1
     steps:
+      - checkout
+
       - aws-cli/setup:
           role_arn: ${AWS_OIDC_ROLE_ARN}
           region: ${AWS_REGION}
+          role_session_name: circleci-fastapi-deploy
+          session_duration: "3600"
+
       - run:
+          name: Verify AWS auth
           command: aws sts get-caller-identity
 
-workflows:
-  test:
-    jobs:
-      - test-oidc
+      - run:
+          name: Example deploy command
+          command: |
+            aws s3 ls
