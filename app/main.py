@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 
 app = FastAPI()
@@ -5,7 +6,8 @@ app = FastAPI()
 
 @app.get("/")
 def read_root():
-    return {"message": "Hello World", "status": "ok"}
+    version = os.getenv("AWS_CODE_DEPLOY_DEPLOYMENT_DESCRIPTION", "unknown")
+    return {"message": "Hello World", "status": "ok", "version": version}
 
 
 @app.get("/health")
